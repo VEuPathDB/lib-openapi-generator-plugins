@@ -1,0 +1,2 @@
+[libraries]
+openapi-codegen = { module = "org.openapitools:openapi-generator", version = "7.13.0" }

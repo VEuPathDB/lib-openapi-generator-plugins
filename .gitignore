@@ -1,0 +1,7 @@
+.idea/*
+!.idea/inspectionProfiles
+
+.gradle/
+build/
+.env
+.envrc

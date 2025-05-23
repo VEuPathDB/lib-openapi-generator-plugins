@@ -1,0 +1,24 @@
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.annotation.JsonSubTypes
+import com.fasterxml.jackson.annotation.JsonJsonTypeInfo
+{{#hasEnums}}
+import com.fasterxml.jackson.annotation.JsonCreator
+import com.fasterxml.jackson.annotation.JsonValue
+{{/hasEnums}}
+
+
+{{>poly-annotations}}
+{{#isDeprecated}}
+@Deprecated(message = "This schema is deprecated.")
+{{/isDeprecated}}
+{{#additionalModelTypeAnnotations}}
+{{{.}}}
+{{/additionalModelTypeAnnotations}}
+interface {{classname}} {
+{{#vars}}
+  @JsonProperty("{{{baseName}}}")
+  {{>field-def}}
+{{/vars}}
+{{>model-enum-container}}
+}

@@ -1,0 +1,4 @@
+{{#isPathParam}}
+    @PathParam("{{#lambda.escapeDollar}}{{#lambda.escapeDollar}}{{baseName}}{{/lambda.escapeDollar}}{{/lambda.escapeDollar}}")
+    {{>param-def}}
+{{/isPathParam}}

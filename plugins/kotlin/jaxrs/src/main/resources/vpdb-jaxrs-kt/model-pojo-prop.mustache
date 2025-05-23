@@ -1,0 +1,6 @@
+{{^-first}}
+
+{{/-first}}
+  @JsonProperty("{{{baseName}}}"){{#required}}
+  {{>field-def}}{{#defaultValue}} = {{{defaultValue}}}{{/defaultValue}}{{/required}}{{^required}}
+  {{>field-def}} = {{#defaultValue}}{{{defaultValue}}}{{/defaultValue}}{{^defaultValue}}null{{/defaultValue}}{{/required}}

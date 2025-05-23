@@ -1,0 +1,13 @@
+{{#returnResponse}}
+: Response
+{{/returnResponse}}
+{{^returnResponse}}
+  {{#vendorExtensions.x-return-response}}
+: Response
+  {{/vendorExtensions.x-return-response}}
+  {{^vendorExtensions.x-return-response}}
+    {{#returnType}}
+: {{{returnType}}}
+    {{/returnType}}
+  {{/vendorExtensions.x-return-response}}
+{{/returnResponse}}

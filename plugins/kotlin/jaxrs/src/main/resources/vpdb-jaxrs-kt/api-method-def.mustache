@@ -1,0 +1,14 @@
+  @{{httpMethod}}
+  @Path("{{{path}}}")
+  {{#hasConsumes}}
+  @Consumes({{#consumes}}"{{{mediaType}}}"{{^-last}}, {{/-last}}{{/consumes}})
+  {{/hasConsumes}}
+  {{#hasProduces}}
+  @Produces({{#produces}}"{{{mediaType}}}"{{^-last}}, {{/-last}}{{/produces}})
+  {{/hasProduces}}
+  {{#useCoroutines}}suspend {{/useCoroutines}}fun {{nickname}}(
+{{#allParams}}
+  {{^-first}}
+
+  {{/-first}}
+{{>param-header}}{{>param-cookie}}{{>param-path}}{{>param-query}}{{>param-form}}{{>param-body}}{{/allParams}}  ){{>api-method-response}}
