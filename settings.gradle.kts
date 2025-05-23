@@ -1,4 +1,4 @@
-rootProject.name = "openapi-jaxrs-kt"
+rootProject.name = "openapi-generator-plugins"
 
 include(":jaxrs-kt")
 project(":jaxrs-kt").apply {
