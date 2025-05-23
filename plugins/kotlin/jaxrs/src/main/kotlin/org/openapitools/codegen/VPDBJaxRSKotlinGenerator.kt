@@ -1,26 +1,14 @@
 package org.openapitools.codegen
 
-import com.samskivert.mustache.Mustache
 import org.openapitools.codegen.languages.KotlinServerCodegen
 import org.openapitools.codegen.model.ModelMap
 import org.openapitools.codegen.model.ModelsMap
 import org.openapitools.codegen.model.OperationsMap
 import org.openapitools.codegen.utils.ModelUtils
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 
 class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
-  private val LOGGER: Logger = LoggerFactory.getLogger(javaClass)
 
-  /**
-   * Configures a friendly name for the generator.  This will be used by the generator
-   * to select the library with the -g flag.
-   *
-   * @return the friendly name for the generator
-   */
-  override fun getName(): String {
-    return "vpdb-jaxrs-kt"
-  }
+  override fun getName() = "vpdb-jaxrs-kt"
 
   init {
     languageSpecificPrimitives = HashSet<String>(languageSpecificPrimitives.size + 4).apply {
@@ -38,22 +26,14 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
     embeddedTemplateDir = "vpdb-jaxrs-kt"
     templateDir = embeddedTemplateDir
 
-
-
-    addMustacheLambdas()
-      .put("indent") { frag, out ->
-        val rendered = frag.execute()
-
-        if (rendered.isNullOrEmpty())
-          return@put
-
-        val buffer = out.buffered()
-
-        rendered.lineSequence()
-          .forEach { buffer.append("  ").append(it).appendLine() }
-
-        buffer.flush()
-      }
+    addMustacheLambdas().put("indent") { frag, out ->
+      frag.execute().takeUnless { it.isNullOrEmpty() }
+        ?.also {
+          val buffer = out.buffered()
+          it.lineSequence().forEach { buffer.append("  ").append(it).appendLine() }
+          buffer.flush()
+        }
+    }
   }
 
   override fun processOpts() {
@@ -62,21 +42,19 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
   }
 
   override fun postProcessAllModels(models: Map<String, ModelsMap>): Map<String, ModelsMap> {
-    val enumDiscriminators = HashMap<String, Map<Any, String>>()
+    return super.postProcessAllModels(models).also { out ->
+      val enumDiscriminators = HashMap<String, Map<Any, String>>()
 
-    val out = super.postProcessAllModels(models)
-
-    out.asSequence()
-      .onEach { (_, map) -> map.imports = emptyList() }
-      .map { it.key }
-      .mapNotNull { ModelUtils.getModelByName(it, models) }
-      .onEach { it.imports = it.imports.filterTo(HashSet(it.imports.size)) { import -> import.contains('.') } }
-      .onEach { it.processUnsigned() }
-      .filterNot { it.parentModel?.discriminator == null }
-      .filterNot { it.parentModel.discriminator.propertyType in languageSpecificPrimitives }
-      .forEach { it.processDiscriminator(models, enumDiscriminators) }
-
-    return out
+      out.asSequence()
+        .onEach { (_, map) -> map.imports = emptyList() }
+        .map { it.key }
+        .mapNotNull { ModelUtils.getModelByName(it, models) }
+        .onEach { it.imports = it.imports.filterTo(HashSet(it.imports.size)) { import -> import.contains('.') } }
+        .onEach { it.processUnsigned() }
+        .filterNot { it.parentModel?.discriminator == null }
+        .filterNot { it.parentModel.discriminator.propertyType in languageSpecificPrimitives }
+        .forEach { it.processDiscriminator(models, enumDiscriminators) }
+    }
   }
 
   private fun CodegenModel.processUnsigned() {
@@ -107,13 +85,12 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
   }
 
   override fun postProcessOperationsWithModels(operations: OperationsMap, allModels: MutableList<ModelMap>): OperationsMap {
-    val out = super.postProcessOperationsWithModels(operations, allModels)
-
-    out.imports = out.imports
-      .filterNotTo(ArrayList(8)) { it["import"]?.startsWith(modelPackage) == true }
-      .also { it.add(mapOf("import" to "$modelPackage.*")) }
-
-    return out
+    return super.postProcessOperationsWithModels(operations, allModels)
+      .apply {
+        imports = imports
+          .filterNotTo(ArrayList(8)) { it["import"]?.startsWith(modelPackage) == true }
+          .also { it.add(mapOf("import" to "$modelPackage.*")) }
+      }
   }
 
   private fun CodegenModel.processDiscriminator(
@@ -169,19 +146,12 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
   ): String {
     get(disc.classname)?.also { return it[name]!! }
 
-
-    LOGGER.info("caching discriminator enum {}", disc.classname)
-
     val enumVals = disc.allowableValues["enumVars"] as List<Map<String, Any>>
     val rawVals = disc.allowableValues["values"] as List<Any>
 
-    val cached = enumVals.asSequence()
+    return enumVals.asSequence()
       .mapIndexed { i, it -> rawVals[i] to "${disc.classname}.${it["name"]}" }
       .toMap()
-
-    // compute cache
-    put(disc.classname, cached)
-
-    return cached[name]!!
+      .also { put(disc.classname, it) }[name]!!
   }
 }
