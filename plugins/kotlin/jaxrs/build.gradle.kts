@@ -12,16 +12,18 @@ repositories {
 }
 
 dependencies {
-  implementation(libs.openapi.codegen)
+  implementation(libs.openapi.codegen) {
+    exclude(group = "com.github.jknack")
+  }
 }
 
 java {
-  targetCompatibility = JavaVersion.VERSION_11
+  targetCompatibility = JavaVersion.VERSION_17
 }
 
 kotlin {
   compilerOptions {
-    jvmTarget = JvmTarget.JVM_11
+    jvmTarget = JvmTarget.JVM_17
   }
 }
 

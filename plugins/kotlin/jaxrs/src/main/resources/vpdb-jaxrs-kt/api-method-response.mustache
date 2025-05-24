@@ -6,8 +6,13 @@
 : Response
   {{/vendorExtensions.x-return-response}}
   {{^vendorExtensions.x-return-response}}
-    {{#returnType}}
+    {{#hasMultipleResponses}}
+: {{#pascalcase}}{{nickname}}{{/pascalcase}}UnionResponse
+    {{/hasMultipleResponses}}
+    {{^hasMultipleResponses}}
+      {{#returnType}}
 : {{{returnType}}}
-    {{/returnType}}
+      {{/returnType}}
+    {{/hasMultipleResponses}}
   {{/vendorExtensions.x-return-response}}
 {{/returnResponse}}

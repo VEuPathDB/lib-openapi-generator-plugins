@@ -1,11 +1,15 @@
 package {{package}}
 
 import java.io.InputStream
+{{#vendorExtensions.extraImports}}
+import {{{.}}}
+{{/vendorExtensions.extraImports}}
 
 import {{javaxPackage}}.ws.rs.*
 import {{javaxPackage}}.ws.rs.core.Response
 
-{{#imports}}import {{import}}
+{{#imports}}
+import {{import}}
 {{/imports}}
 
 {{#hasConsumes}}
@@ -23,7 +27,6 @@ class {{classname}} {
 {{/interfaceOnly}}
 {{#operations}}
   {{#operation}}
-
     {{#interfaceOnly}}
 {{>api-method-def}}
     {{/interfaceOnly}}
