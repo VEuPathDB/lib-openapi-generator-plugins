@@ -74,11 +74,6 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
 
   // region Model Processing
 
-  override fun postProcessResponseWithProperty(response: CodegenResponse, property: CodegenProperty?) {
-    super.postProcessResponseWithProperty(response, property)
-    response.content?.replaceAll(ExtendedMediaType.Companion::extend)
-  }
-
   override fun postProcessAllModels(models: Map<String, ModelsMap>) =
     (super.postProcessAllModels(models) as Map<String, ModelsMap>)
       .also { out ->
@@ -89,22 +84,58 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
           .map { it.key }
           .mapNotNull { ModelUtils.getModelByName(it, models) }
           .onEach { it.imports = it.imports.filterTo(HashSet(it.imports.size)) { import -> import.contains('.') } }
-          .onEach { it.processUnsigned() }
+          .onEach { it.fixTypes() }
           .filterNot { it.parentModel?.discriminator == null }
           .filterNot { it.parentModel.discriminator.propertyType in languageSpecificPrimitives }
           .forEach { it.processDiscriminator(models, enumDiscriminators) }
       }
       .also { out -> debugModels?.bufferedWriter()?.use { Json.pretty().writeValue(it, out) } }
 
-  private fun CodegenModel.processUnsigned() {
+  private fun CodegenModel.fixTypes() {
+    if (isEnum) {
+      imports.add("com.fasterxml.jackson.annotation.JsonCreator")
+      imports.add("com.fasterxml.jackson.annotation.JsonValue")
+      return
+    }
+
+    val newImports = HashSet<String>(4)
     arrayOf(vars, allVars, requiredVars, optionalVars, readOnlyVars, readWriteVars)
       .processProperties {
-        when {
-          it.isLong    -> it.overrideDataType("ULong")
-          it.isInteger -> it.overrideDataType("UInt")
-        }
+        newImports.add("com.fasterxml.jackson.annotation.JsonProperty")
+        it.processUnsigned()
+        it.processDate(newImports)
         BreakState.Continue
       }
+    imports.addAll(newImports)
+  }
+
+  private fun CodegenProperty.processDate(imports: MutableSet<String>) {
+    when (format) {
+      "date-time" -> {
+        overrideDataType("OffsetDateTime")
+        imports.add("com.fasterxml.jackson.annotation.JsonFormat")
+        imports.add("java.time.OffsetDateTime")
+      }
+      "date" -> {
+        overrideDataType("LocalDate")
+        imports.add("com.fasterxml.jackson.annotation.JsonFormat")
+        imports.add("java.time.LocalDate")
+      }
+      "time" -> {
+        overrideDataType("OffsetTime")
+        imports.add("com.fasterxml.jackson.annotation.JsonFormat")
+        imports.add("java.time.OffsetTime")
+      }
+    }
+  }
+
+  private fun CodegenProperty.processUnsigned() {
+    if ("x-unsigned" in vendorExtensions) {
+      when {
+        isLong    -> overrideDataType("ULong")
+        isInteger -> overrideDataType("UInt")
+      }
+    }
   }
 
   private fun CodegenModel.processDiscriminator(
@@ -151,6 +182,11 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
 
   // region Operation Processing
 
+  override fun postProcessResponseWithProperty(response: CodegenResponse, property: CodegenProperty?) {
+    super.postProcessResponseWithProperty(response, property)
+    response.content?.replaceAll(ExtendedMediaType.Companion::extend)
+  }
+
   override fun postProcessOperationsWithModels(allOps: OperationsMap, allModels: MutableList<ModelMap>) =
     (super.postProcessOperationsWithModels(allOps, allModels) as OperationsMap)
       .apply(::extend)
@@ -170,18 +206,19 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
             extraImports.add("$modelPackage.support.*")
           if (it.useJaxRsResponse)
             extraImports.add("jakarta.ws.core.Response")
-          if (it.allParams.any { p -> p.isFormParam && !p.isFile })
+          if (it.formParams.any { p -> p.baseType == "InputStream" })
             extraImports.add("java.io.InputStream")
         }
 
         extraImports.sorted().forEach { imports.add(mapOf("import" to it)) }
       }
       .apply {
-        val newImports = HashSet<String>()
         operations.extendedOperation.forEach { op ->
-          op.allParams.forEach { it.fixStdLibImports(newImports) }
+          op.allParams.forEach { it.fixStdLibImports(op.extraImports) }
+          op.requiredParams.forEach { it.fixStdLibImports(op.extraImports) }
+          op.optionalParams.forEach { it.fixStdLibImports(op.extraImports) }
+          op.formParams.forEach { it.fixStdLibImports(op.extraImports) }
         }
-        vendorExtensions["extraImports"] = newImports
       }
       .also { operations = it }
       .also { ops -> debugOperations?.bufferedWriter()?.use { Json.pretty().writeValue(it, ops) } }
@@ -194,12 +231,12 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
       }
 
       isArray -> {
-        when (items.dataType) {
+        when (baseType) {
           "java.io.File" -> "File"
           else           -> null
         }?.also {
-          newImports.add(items.dataType)
-          overrideDataType(dataType.replace(items.dataType, it))
+          newImports.add(baseType)
+          overrideDataType(dataType.replace(baseType, it))
           items.overrideDataType("File")
         }
       }
@@ -223,7 +260,7 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
 
       supportFolder.createDirectories()
 
-      JteAdaptor.compileTemplate(supportPackage, "model/union/def.kte", supportFolder.resolve("UnionResponse.kt"))
+      JteAdaptor.compileTemplate(supportPackage, "model/union/def.kte", supportFolder.resolve("AbstractUnionResponse.kt"))
 
       operations!!.operations.operation.asSequence()
         .map {

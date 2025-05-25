@@ -8,7 +8,9 @@ class ModelRoot(val map: Map<String, Any>) {
   val packageName get() = map["modelPackage"] as String
 
   @Suppress("UNCHECKED_CAST")
-  val imports get() = map["imports"] as List<String>? ?: emptyList()
+  val imports get() = (map["imports"] as List<String>?)
+    ?.let { (it + model.imports).sorted() }
+    ?: model.imports.sorted()
 
   @Suppress("UNCHECKED_CAST")
   val model: CodegenModel get() = (map["models"] as List<ModelMap>)[0].model

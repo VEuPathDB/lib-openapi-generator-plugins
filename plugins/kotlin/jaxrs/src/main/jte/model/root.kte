@@ -7,10 +7,8 @@ package ${models.packageName}
 import ${import}
 @endfor
 
-@if(models.model.isEnum)
-import com.fasterxml.jackson.annotation.JsonCreator
-import com.fasterxml.jackson.annotation.JsonValue
 
+@if(models.model.isEnum)
 @template.model.enum(model = models.model)
 @elseif(!models.model.oneOf.isNullOrEmpty())
 typealias ${models.model.classname} = Any
