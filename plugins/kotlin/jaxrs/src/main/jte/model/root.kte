@@ -1,0 +1,28 @@
+@import vpdb.codegen.jaxrs.kt.ModelRoot
+@param models: ModelRoot
+
+package ${models.packageName}
+
+@for(import in models.imports)
+import ${import}
+@endfor
+
+@if(models.model.isEnum)
+import com.fasterxml.jackson.annotation.JsonCreator
+import com.fasterxml.jackson.annotation.JsonValue
+
+@template.model.enum(model = models.model)
+@elseif(!models.model.oneOf.isNullOrEmpty())
+typealias ${models.model.classname} = Any
+@elseif(models.model.isAlias)
+typealias ${models.model.classname} = ${models.model.dataType}
+@else
+@for(ann in models.extraTypeAnnotations)
+${ann}
+@endfor
+  @if(models.model.discriminator != null)
+@template.model.iface(model = models.model)
+  @else
+@template.model.pojo(model = models.model)
+  @endif
+@endif

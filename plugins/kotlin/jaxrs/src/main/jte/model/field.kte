@@ -1,0 +1,3 @@
+@import org.openapitools.codegen.CodegenProperty
+@param param: CodegenProperty
+val ${param.baseName}: @if(param.isEnum)${param.nameInPascalCase}@else${param.dataType}@endif@if(param.defaultValue.isNullOrBlank() && !param.required)?@endif

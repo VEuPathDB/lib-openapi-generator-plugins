@@ -1,0 +1,59 @@
+@import vpdb.codegen.jaxrs.kt.UnionImpl
+@param union: UnionImpl
+package ${union.packageName}
+
+@for(imp in union.imports)
+import ${imp}
+@endfor
+import jakarta.ws.rs.core.*
+
+class Union${union.operation.operationIdCamelCase}Response private constructor(
+  statusType: Int,
+  entity: Any?,
+  contentType: String?,
+): AbstractUnionResponse(statusType, entity, contentType) {
+  companion object {
+    @for((response, content) in union.responses)
+      @if(content.dataType.isNotBlank())
+        @if(response.responseHeaders.size > 1)
+          fun ${content.prefixName()}${response.code}(
+          @for(header in response.responseHeaders)
+            ${header.paramName}: ${header.dataType}@if(!header.required)? = null@endif,
+          @endfor
+            body: ${content.dataType},
+          ) =
+        @elseif(response.responseHeaders.size == 1)
+          !{val header = response.responseHeaders[0]}
+          fun ${content.prefixName()}${response.code}(${header.paramName}: ${header.dataType}@if(!header.required)? = null@endif, body: ${content.dataType}) =
+        @else
+          fun ${content.prefixName()}${response.code}(body: ${content.dataType}) =
+        @endif
+      @else
+        @if(response.responseHeaders.size > 1)
+          fun empty${response.code}(
+            @for(header in response.responseHeaders)
+              ${header.paramName}: ${header.dataType}@if(!header.required)? = null@endif,
+            @endfor
+          ) =
+        @elseif(response.headers.size == 1)
+          !{val header = response.responseHeaders[0]}
+          fun empty${response.code}(${header.paramName}: ${header.dataType}@if(!header.required)? = null@endif) =
+        @else
+          fun empty${response.code}() =
+        @endif
+      @endif
+        Union${union.operation.operationIdCamelCase}Response(${response.code}, @if(content.dataType.isNotBlank())body, "${content.mimeType}"@elsenull, null@endif)
+          @if(response.responseHeaders.isNotEmpty())
+            .apply {
+              @for(header in response.responseHeaders)
+                @if(header.required)
+                  headers.putSingle("${header.baseName}", ${header.paramName}@if(!header.isString).toString()@endif)
+                @else
+                  ${header.paramName}?.let { headers.putSingle("${header.baseName}", it@if(!header.isString).toString()@endif) }
+                @endif
+              @endfor
+            }
+          @endif
+    @endfor
+  }
+}

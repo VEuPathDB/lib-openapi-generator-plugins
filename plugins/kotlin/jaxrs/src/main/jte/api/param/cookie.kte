@@ -1,0 +1,8 @@
+@import org.openapitools.codegen.CodegenParameter
+@import vpdb.codegen.jaxrs.kt.tpl.escapeDollar
+@param it: CodegenParameter
+@CookieParam("${it.baseName.escapeDollar()}")
+    @if(!it.isContainer && !it.defaultValue.isNullOrBlank())
+      @DefaultValue("${it.defaultValue}")
+    @endif
+    @template.api.param.arg(it = it)

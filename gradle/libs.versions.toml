@@ -1,3 +1,5 @@
 [libraries]
 openapi-codegen = { module = "org.openapitools:openapi-generator", version = "7.13.0" }
 
+jte-core = { module = "gg.jte:jte", version = "3.2.1" }
+jte-kt   = { module = "gg.jte:jte-kotlin", version = "3.2.1" }

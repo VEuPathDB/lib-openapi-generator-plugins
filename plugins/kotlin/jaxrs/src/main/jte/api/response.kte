@@ -1,0 +1,9 @@
+@import vpdb.codegen.jaxrs.kt.ExtendedOperation
+@param op: ExtendedOperation
+@if(op.useJaxRsResponse)
+: Response
+@elseif(op.hasMultipleResponses)
+: Union${op.operationIdCamelCase}Response
+@elseif(!op.returnType.isNullOrEmpty())
+: ${op.returnType}
+@endif

@@ -1,9 +1,0 @@
-{{#isQueryParam}}
-    @QueryParam("{{#lambda.escapeDollar}}{{baseName}}{{/lambda.escapeDollar}}")
-  {{^isContainer}}
-    {{#defaultValue}}
-    @DefaultValue({{#lambda.doublequote}}{{{.}}}{{/lambda.doublequote}})
-    {{/defaultValue}}
-  {{/isContainer}}
-    {{>param-def}}
-{{/isQueryParam}}

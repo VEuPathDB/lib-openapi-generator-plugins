@@ -1,0 +1,3 @@
+@import org.openapitools.codegen.CodegenParameter
+@param it: CodegenParameter
+    @template.api.param.arg(it = it)

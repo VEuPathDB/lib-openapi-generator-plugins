@@ -1,0 +1,31 @@
+@import vpdb.codegen.jaxrs.kt.ExtendedOperation
+@import gg.jte.support.ForSupport
+@param it: ExtendedOperation
+  @${it.httpMethod}
+  @Path("${it.path}")
+  @if(it.hasConsumes)
+    @Consumes(@for(mt in ForSupport.of(it.consumes))"${mt.get()["mediaType"]}"@if(!mt.isLast), @endif@endfor)
+  @endif
+  @if(it.hasProduces)
+    @Produces(@for(mt in ForSupport.of(it.produces))"${mt.get()["mediaType"]}"@if(!mt.isLast), @endif@endfor)
+  @endif
+  fun ${it.operationId}(
+    @for(param in it.headerParams)
+      @template.api.param.header(it = param)
+    @endfor
+    @for(param in it.cookieParams)
+      @template.api.param.cookie(it = param)
+    @endfor
+    @for(param in it.pathParams)
+      @template.api.param.path(it = param)
+    @endfor
+    @for(param in it.queryParams)
+      @template.api.param.query(it = param)
+    @endfor
+    @for(param in it.formParams)
+      @template.api.param.form(it = param)
+    @endfor
+    @for(param in it.bodyParams)
+      @template.api.param.body(it = param)
+    @endfor
+  )@template.api.response(op = it)

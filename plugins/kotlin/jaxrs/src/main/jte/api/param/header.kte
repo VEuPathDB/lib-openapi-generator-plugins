@@ -1,0 +1,7 @@
+@import org.openapitools.codegen.CodegenParameter
+@param it: CodegenParameter
+@HeaderParam("${it.baseName}")
+    @if(!it.defaultValue.isNullOrBlank())
+      @DefaultValue("${it.defaultValue}")
+    @endif
+    @template.api.param.arg(it = it)

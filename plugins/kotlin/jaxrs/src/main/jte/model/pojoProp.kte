@@ -1,0 +1,8 @@
+@import org.openapitools.codegen.CodegenProperty
+@param param: CodegenProperty
+@JsonProperty("${param.baseName}")
+  @if(param.required)
+    @if(param.isInherited)override @endif@template.model.field(param = param)@if(!param.defaultValue.isNullOrBlank()) = ${param.defaultValue}@endif,
+  @else
+    @if(param.isInherited)override @endif@template.model.field(param = param) = @if(!param.defaultValue.isNullOrBlank())${param.defaultValue}@elsenull@endif,
+  @endif

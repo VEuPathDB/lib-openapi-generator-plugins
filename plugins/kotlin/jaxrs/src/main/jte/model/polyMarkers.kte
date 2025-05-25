@@ -1,0 +1,11 @@
+@import org.openapitools.codegen.CodegenModel
+@param it: CodegenModel
+
+@JsonIgnoreProperties("${it.discriminator.propertyBaseName}")
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "${it.discriminator.propertyBaseName}", visible = true)
+@if(!it.discriminator.mappedModels.isNullOrEmpty())
+@JsonSubTypes(
+  @for(sub in it.discriminator.mappedModels)
+  JsonSubTypes.Type(value = ${sub.modelName}::class, name = "${it.vendorExtensions?.get("x-discriminator-value") as String? ?: sub.mappingName}"),
+  @endfor
+)@endif

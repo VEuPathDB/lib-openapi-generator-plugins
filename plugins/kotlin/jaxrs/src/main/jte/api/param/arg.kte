@@ -1,0 +1,3 @@
+@import org.openapitools.codegen.CodegenParameter
+@param it: CodegenParameter
+${it.paramName}: ${it.dataType}@if(it.defaultValue.isNullOrBlank() && !it.required)?@endif,

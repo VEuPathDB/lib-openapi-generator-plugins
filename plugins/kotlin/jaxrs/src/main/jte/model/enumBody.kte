@@ -1,0 +1,30 @@
+@import org.openapitools.codegen.CodegenModel
+@param model: CodegenModel
+
+enum class ${model.classname}(val value: ${model.dataType}) {
+  @for(entry in (model.allowableValues["enumVars"] as List<Map<String, Any>>))
+    @if(entry["isList"] == true)
+      ${entry["name"] as String}(listOf(${entry["value"] as String})),
+    @elseif(entry["isArray"] == true)
+      ${entry["name"] as String}(arrayOf(${entry["value"] as String})),
+    @else
+      ${entry["name"] as String}(${entry["value"] as String}),
+    @endif
+  @endfor
+  ;
+
+  @JsonValue
+  override fun toString() = value@if(!model.isString).toString()@endif
+
+  companion object {
+    @JvmStatic
+    @JsonCreator
+    fun fromValue(value: ${model.dataType}) =
+      fromValueOrNull(value)
+        ?: throw IllegalArgumentException("unrecognized ${model.classname} value $value")
+
+    @JvmStatic
+    fun fromValueOrNull(value: ${model.dataType}) =
+      entries.firstOrNull { it.value == value }
+  }
+}

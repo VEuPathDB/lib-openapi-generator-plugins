@@ -1,0 +1,6 @@
+@import org.openapitools.codegen.CodegenModel
+@param model: CodegenModel
+@if(model.isDeprecated)
+@Deprecated(message = "This schema is deprecated.")
+@endif
+@template.model.enumBody(model = model)

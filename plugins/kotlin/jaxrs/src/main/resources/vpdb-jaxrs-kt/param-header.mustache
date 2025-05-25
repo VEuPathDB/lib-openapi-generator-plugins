@@ -1,7 +1,0 @@
-{{#isHeaderParam}}
-    @HeaderParam("{{baseName}}")
-  {{#defaultValue}}
-    @DefaultValue({{#lambda.doublequote}}{{{.}}}{{/lambda.doublequote}})
-  {{/defaultValue}}
-    {{>param-def}}
-{{/isHeaderParam}}

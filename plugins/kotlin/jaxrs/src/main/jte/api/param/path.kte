@@ -1,0 +1,5 @@
+@import org.openapitools.codegen.CodegenParameter
+@import vpdb.codegen.jaxrs.kt.tpl.escapeDollar
+@param it: CodegenParameter
+@PathParam("${it.baseName.escapeDollar()}")
+    @template.api.param.arg(it = it)

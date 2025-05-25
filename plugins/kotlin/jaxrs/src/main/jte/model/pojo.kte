@@ -1,0 +1,29 @@
+@import org.openapitools.codegen.CodegenModel
+@param model: CodegenModel
+import com.fasterxml.jackson.annotation.JsonProperty
+
+
+@if(model.isDeprecated)
+@Deprecated(message = "This schema is deprecated.")
+@endif
+data class ${model.classname}(
+  @for(param in model.requiredVars)
+    @if(!param.isReadOnly)
+      @template.model.pojoProp(param = param)
+    @endif
+  @endfor
+  @for(param in model.optionalVars)
+    @if(!param.isReadOnly)
+      @template.model.pojoProp(param = param)
+    @endif
+  @endfor)@if(!model.parent.isNullOrBlank()): ${model.parent}@if(model.isMap || model.isArray)()@endif@endif@if(model.vendorExtensions?.get("x-has-data-class-body") == true) {@endif
+  @for(field in model.allVars)
+    @if(field.isReadOnly)
+      @get:JsonProperty("${field.baseName}")
+      override val ${field.baseName}: ${field.dataType}
+        get() = ${field.defaultValue}
+    @endif
+  @endfor
+@if(model.vendorExtensions?.get("x-has-data-class-body") == true)
+}
+@endif

@@ -1,0 +1,29 @@
+@import org.openapitools.codegen.model.OperationsMap
+@import vpdb.codegen.jaxrs.kt.ExtendedOperation
+@import gg.jte.support.ForSupport
+@param ops: OperationsMap
+package ${ops["package"] as String}
+
+@for(op in ops.operations.operation)
+  @for(ext in (op as ExtendedOperation).extraImports)
+import ${ext}
+  @endfor
+@endfor
+import jakarta.ws.rs.*
+@for(imp in ops.imports)
+import ${imp["import"]}
+@endfor
+
+
+@Path("/")
+@if(ops["hasConsumes"] as Boolean? == true)
+  @Consumes(@for(mt in ForSupport.of(ops["consumes"] as List<Map<String, String>>))"${mt.get()["mediaType"]}"@if(!mt.isLast), @endif@endfor)
+@endif
+@if(ops["hasProduces"] as Boolean? == true)
+  @Produces({@for(mt in ForSupport.of(ops["produces"] as List<Map<String, String>>))"${mt.get()["mediaType"]}"@if(!mt.isLast), @endif@endfor)
+@endif
+interface ${ops["classname"] as String} {
+@for(op in ops.operations.operation)
+  @template.api.method(it = (op as ExtendedOperation))
+@endfor
+}

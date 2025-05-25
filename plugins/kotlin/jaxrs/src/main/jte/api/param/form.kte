@@ -1,0 +1,4 @@
+@import org.openapitools.codegen.CodegenParameter
+@param it: CodegenParameter
+@FormParam(value = "${it.baseName}")
+    @if(!it.isFile)@template.api.param.arg(it = it)@else${it.paramName}: InputStream@if(!it.required)?@endif@endif
