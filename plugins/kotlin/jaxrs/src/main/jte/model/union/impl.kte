@@ -5,7 +5,6 @@ package ${union.packageName}
 @for(imp in union.imports)
 import ${imp}
 @endfor
-import jakarta.ws.rs.core.*
 
 class Union${union.operation.operationIdCamelCase}Response private constructor(
   statusType: Int,
@@ -47,9 +46,9 @@ class Union${union.operation.operationIdCamelCase}Response private constructor(
             .apply {
               @for(header in response.responseHeaders)
                 @if(header.required)
-                  headers.putSingle("${header.baseName}", ${header.paramName}@if(!header.isString).toString()@endif)
+                  headers.putSingle("${header.baseName}", ${header.paramName}@if(header.dataType != "String").toString()@endif)
                 @else
-                  ${header.paramName}?.let { headers.putSingle("${header.baseName}", it@if(!header.isString).toString()@endif) }
+                  ${header.paramName}?.let { headers.putSingle("${header.baseName}", it@if(header.dataType != "String").toString()@endif) }
                 @endif
               @endfor
             }

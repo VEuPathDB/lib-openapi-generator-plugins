@@ -10,7 +10,7 @@ import java.util.Locale
 import java.util.StringTokenizer
 import java.util.TimeZone
 
-internal abstract class AbstractUnionResponse(
+abstract class AbstractUnionResponse(
   private val statusType: StatusType,
   private val entity: Any? = null,
   private val contentType: MediaType? = null,

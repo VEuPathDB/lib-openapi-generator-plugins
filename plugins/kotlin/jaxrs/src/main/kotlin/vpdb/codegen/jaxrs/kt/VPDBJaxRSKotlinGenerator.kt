@@ -230,7 +230,7 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
           (it as ExtendedOperation).let { op ->
             UnionImpl(
               supportPackage,
-              op.extraImports.also { it.add(modelPackage) },
+              op.extraImports.also { it.add("$modelPackage.*") },
               op,
               op.responses.asSequence()
                 .flatMap { res -> res.content?.asSequence()?.map { con -> res to con } ?: emptySequence() }
