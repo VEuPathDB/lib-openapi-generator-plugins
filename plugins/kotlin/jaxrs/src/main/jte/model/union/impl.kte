@@ -2,9 +2,17 @@
 @param union: UnionImpl
 package ${union.packageName}
 
-@for(imp in union.imports)
-import ${imp}
-@endfor
+@if(union.useStarModelImport)
+  import ${union.modelPackage}.*
+  @for(imp in union.nonModelImports)
+    import ${imp}
+  @endfor
+@else
+  @for(imp in union.imports.sorted())
+    import ${imp}
+  @endfor
+@endif
+
 
 class Union${union.operation.operationIdCamelCase}Response private constructor(
   statusType: Int,

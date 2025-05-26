@@ -1,10 +1,12 @@
-package vpdb.codegen.jaxrs.kt
+package vpdb.codegen.jaxrs.kt.ext
 
 import io.swagger.v3.oas.models.examples.Example
 import org.openapitools.codegen.CodegenEncoding
 import org.openapitools.codegen.CodegenMediaType
 import org.openapitools.codegen.CodegenProperty
 import org.openapitools.codegen.SchemaTestCase
+import vpdb.codegen.jaxrs.kt.isWord
+import vpdb.codegen.jaxrs.kt.mimeTypeNameOverrides
 
 @Suppress("MemberVisibilityCanBePrivate")
 class ExtendedMediaType: CodegenMediaType {

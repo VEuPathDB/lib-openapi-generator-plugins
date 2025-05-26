@@ -1,9 +1,8 @@
 @import vpdb.codegen.jaxrs.kt.ModelRoot
 @param models: ModelRoot
-
 package ${models.packageName}
 
-@for(import in models.imports)
+@for(import in models.model.imports.sorted())
 import ${import}
 @endfor
 

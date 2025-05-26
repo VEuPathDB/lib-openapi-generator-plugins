@@ -1,6 +1,5 @@
 @import org.openapitools.codegen.CodegenModel
 @param model: CodegenModel
-
 enum class ${model.classname}(val value: ${model.dataType}) {
   @for(entry in (model.allowableValues["enumVars"] as List<Map<String, Any>>))
     @if(entry["isList"] == true)

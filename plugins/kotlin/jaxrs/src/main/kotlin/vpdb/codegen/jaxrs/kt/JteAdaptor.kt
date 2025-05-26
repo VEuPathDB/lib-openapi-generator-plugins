@@ -17,7 +17,7 @@ object JteAdaptor: TemplatingEngineAdapter {
   private val extensions = arrayOf("kte")
 
   val templateToBundleTypeMapping = mutableMapOf<String, (Map<String, Any>) -> Any>(
-    "model/root.kte" to ::ModelRoot,
+    "model/model.kte" to ::ModelRoot,
     "api/api.kte"    to OperationsMap::class::cast,
   )
 

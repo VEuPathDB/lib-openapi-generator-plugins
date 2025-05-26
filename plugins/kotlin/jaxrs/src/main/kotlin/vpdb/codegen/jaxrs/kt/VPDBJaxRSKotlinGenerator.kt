@@ -1,13 +1,22 @@
 package vpdb.codegen.jaxrs.kt
 
-import io.swagger.v3.core.util.Json
+import com.fasterxml.jackson.databind.ObjectWriter
+import io.swagger.util.Json
+import io.swagger.v3.oas.models.OpenAPI
+import io.swagger.v3.oas.models.media.Schema
 import org.openapitools.codegen.*
 import org.openapitools.codegen.languages.KotlinServerCodegen
 import org.openapitools.codegen.model.ModelMap
 import org.openapitools.codegen.model.ModelsMap
-import org.openapitools.codegen.model.OperationMap
 import org.openapitools.codegen.model.OperationsMap
 import org.openapitools.codegen.utils.ModelUtils
+import vpdb.codegen.jaxrs.kt.debug.configureJsonWriter
+import vpdb.codegen.jaxrs.kt.ext.ExtendedMediaType
+import vpdb.codegen.jaxrs.kt.tpl.needsWrapperResponse
+import vpdb.codegen.jaxrs.kt.tpl.usesJaxRSResponse
+import vpdb.codegen.jaxrs.kt.util.ParamValue
+import vpdb.codegen.jaxrs.kt.util.PropValue
+import vpdb.codegen.jaxrs.kt.util.TypedValue
 import java.io.File
 import java.nio.file.Path
 import java.util.IdentityHashMap
@@ -16,6 +25,15 @@ import kotlin.io.path.bufferedWriter
 import kotlin.io.path.createDirectories
 
 class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
+  /**
+   * Packages that the underlying implementation will not resolve to imports
+   * (they will use inline package paths), that we will translate and create
+   * imports for.
+   */
+  private val importCorrectionPackages = arrayOf("java.io.", "java.net.", "java.time.")
+
+  private lateinit var jsonWriter: ObjectWriter
+
   private var generateSupportTypes = false
 
   private var debugModels: Path? = null
@@ -24,23 +42,18 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
   private var operations: OperationsMap? = null
 
   init {
-    languageSpecificPrimitives = HashSet<String>(languageSpecificPrimitives.size + 4).apply {
-      languageSpecificPrimitives.mapTo(this) { it.substringAfterLast('.') }
-      add("UByte")
-      add("UShort")
-      add("UInt")
-      add("ULong")
-    }
-    defaultIncludes = HashSet<String>(defaultIncludes.size + 4).apply {
-      defaultIncludes.mapTo(this) { it.substringAfterLast('.') }
-    }
-    typeMapping.replaceAll { _, value -> value.substringAfterLast('.') }
-    instantiationTypes.replaceAll { _, value -> value.substringAfterLast('.') }
+    library = Constants.JAXRS_SPEC
+
+    languageSpecificPrimitives = kotlinBuiltIns
+    defaultIncludes = kotlinBuiltIns
+    typeMapping = dataTypeMapping
+    instantiationTypes = implementations
+
     templateDir = null
     embeddedTemplateDir = null
 
     modelTemplateFiles.clear()
-    modelTemplateFiles["model/root.kte"] = ".kt"
+    modelTemplateFiles["model/model.kte"] = ".kt"
 
     apiTemplateFiles.clear()
     apiTemplateFiles["api/api.kte"] = ".kt"
@@ -68,14 +81,73 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
         is Path   -> debugOperations = path
       }
 
+    if (debugModels != null || debugOperations != null)
+      jsonWriter = configureJsonWriter()
+
     additionalProperties[Constants.INTERFACE_ONLY] = true
     additionalProperties[Constants.OMIT_GRADLE_WRAPPER] = true
+
+    enablePostProcessFile = true
   }
 
-  // region Model Processing
+  override fun toDefaultValue(cp: CodegenProperty, schema: Schema<*>): String? {
+    return if (ModelUtils.isURISchema(schema)) {
+      if (schema.default != null) {
+        "URI.create(\"${schema.default}\")"
+      } else {
+        null
+      }
+    } else {
+      super.toDefaultValue(cp, schema)
+    }
+  }
 
-  override fun postProcessAllModels(models: Map<String, ModelsMap>) =
-    (super.postProcessAllModels(models) as Map<String, ModelsMap>)
+  override fun postProcessModels(objs: ModelsMap): ModelsMap {
+    super.postProcessModels(objs)
+
+    val model = (objs.models.firstOrNull { it != null } ?: return objs).model
+
+//    model.imports = model.imports.filterTo(HashSet(objs.imports.size)) { import -> import.contains('.') }
+    model.fixTypes()
+
+    // Bug in the generator, this return value isn't used.
+    return objs
+  }
+
+  override fun fromProperty(
+    name: String,
+    p: Schema<*>,
+    required: Boolean,
+    schemaIsFromAdditionalProperties: Boolean,
+  ): CodegenProperty =
+    PropValue(super.fromProperty(name, p, required, schemaIsFromAdditionalProperties))
+      .apply { processProperty() }
+      .value
+
+  override fun postProcessModelProperty(model: CodegenModel, property: CodegenProperty) {
+    super.postProcessModelProperty(model, property)
+
+    if (property.baseType.contains('.')) {
+      model.imports.add(property.baseType)
+      if (property.baseType.startsWith("java.time."))
+        model.imports.add("com.fasterxml.jackson.annotation.JsonFormat")
+    }
+  }
+
+  override fun postProcessParameter(parameter: CodegenParameter) {
+    super.postProcessParameter(parameter)
+
+    if (parameter.isArray) {
+      if (importCorrectionPackages.any { parameter.items!!.baseType.startsWith(it) })
+        ParamValue(parameter).overrideArrayType(parameter.items!!.baseType.substringAfterLast('.'))
+    } else if (!parameter.isContainer) {
+      if (importCorrectionPackages.any { parameter.dataType.startsWith(it) })
+        ParamValue(parameter).overrideDataType(parameter.dataType.substringAfterLast('.'))
+    }
+  }
+
+  override fun postProcessAllModels(models: ModelIndex) =
+    (super.postProcessAllModels(models) as ModelIndex)
       .also { out ->
         val enumDiscriminators = HashMap<String, Map<Any, String>>()
 
@@ -83,180 +155,45 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
           .onEach { (_, map) -> map.imports = emptyList() }
           .map { it.key }
           .mapNotNull { ModelUtils.getModelByName(it, models) }
-          .onEach { it.imports = it.imports.filterTo(HashSet(it.imports.size)) { import -> import.contains('.') } }
-          .onEach { it.fixTypes() }
+          .onEach { it.imports = it.imports.filterTo(HashSet<String>(3)) { i -> i.contains('.') } }
+          .onEach { if (it.discriminator != null) {
+            it.imports.add("com.fasterxml.jackson.annotation.JsonIgnoreProperties")
+            it.imports.add("com.fasterxml.jackson.annotation.JsonSubTypes")
+            it.imports.add("com.fasterxml.jackson.annotation.JsonTypeInfo")
+          } }
           .filterNot { it.parentModel?.discriminator == null }
           .filterNot { it.parentModel.discriminator.propertyType in languageSpecificPrimitives }
           .forEach { it.processDiscriminator(models, enumDiscriminators) }
       }
-      .also { out -> debugModels?.bufferedWriter()?.use { Json.pretty().writeValue(it, out) } }
+      .also { out -> debugModels?.bufferedWriter()?.use { jsonWriter.writeValue(it, out) } }
 
-  private fun CodegenModel.fixTypes() {
-    if (isEnum) {
-      imports.add("com.fasterxml.jackson.annotation.JsonCreator")
-      imports.add("com.fasterxml.jackson.annotation.JsonValue")
-      return
-    }
-
-    val newImports = HashSet<String>(4)
-    arrayOf(vars, allVars, requiredVars, optionalVars, readOnlyVars, readWriteVars)
-      .processProperties {
-        newImports.add("com.fasterxml.jackson.annotation.JsonProperty")
-        it.processUnsigned()
-        it.processDate(newImports)
-        BreakState.Continue
-      }
-    imports.addAll(newImports)
-  }
-
-  private fun CodegenProperty.processDate(imports: MutableSet<String>) {
-    when (format) {
-      "date-time" -> {
-        overrideDataType("OffsetDateTime")
-        imports.add("com.fasterxml.jackson.annotation.JsonFormat")
-        imports.add("java.time.OffsetDateTime")
-      }
-      "date" -> {
-        overrideDataType("LocalDate")
-        imports.add("com.fasterxml.jackson.annotation.JsonFormat")
-        imports.add("java.time.LocalDate")
-      }
-      "time" -> {
-        overrideDataType("OffsetTime")
-        imports.add("com.fasterxml.jackson.annotation.JsonFormat")
-        imports.add("java.time.OffsetTime")
-      }
-    }
-  }
-
-  private fun CodegenProperty.processUnsigned() {
-    if ("x-unsigned" in vendorExtensions) {
-      when {
-        isLong    -> overrideDataType("ULong")
-        isInteger -> overrideDataType("UInt")
-      }
-    }
-  }
-
-  private fun CodegenModel.processDiscriminator(
-    models: Map<String, ModelsMap>,
-    enumDiscriminators: MutableMap<String, Map<Any, String>>,
-  ) {
-    val disc = ModelUtils.getModelByName(parentModel.discriminator.propertyType, models)
-      ?: return
-
-    if (disc.isEnum)
-      processEnumDiscriminator(disc, enumDiscriminators)
-    else
-      processRawDiscriminator()
-  }
-
-  private fun CodegenModel.processEnumDiscriminator(
-    disc: CodegenModel,
-    enumDiscriminators: MutableMap<String, Map<Any, String>>,
-  ) {
-    val discField = parentModel.discriminator.propertyBaseName
-    val discValue = vendorExtensions["x-discriminator-value"] as String
-
-    arrayOf(vars, allVars, requiredVars, optionalVars, readOnlyVars, readWriteVars)
-      .processProperties {
-        if (it.defaultValue == null && it.baseName == discField) {
-          it.defaultValue = enumDiscriminators.getOrComputeDefaultValue(discValue, disc)
-          it.isReadOnly = true
-
-          BreakState.SkipCollection
-        } else {
-          BreakState.Continue
-        }
-      }
-
-    vendorExtensions["x-has-data-class-body"] = true
-  }
-
-  private fun CodegenModel.processRawDiscriminator() {
-    if (defaultValue == null)
-      defaultValue = vendorExtensions["x-discriminator-value"].toString()
-  }
-
-  // endregion Model Processing
-
-  // region Operation Processing
-
-  override fun postProcessResponseWithProperty(response: CodegenResponse, property: CodegenProperty?) {
+  override fun postProcessResponseWithProperty(response: CodegenResponse, property: CodegenProperty) {
     super.postProcessResponseWithProperty(response, property)
     response.content?.replaceAll(ExtendedMediaType.Companion::extend)
   }
 
   override fun postProcessOperationsWithModels(allOps: OperationsMap, allModels: MutableList<ModelMap>) =
-    (super.postProcessOperationsWithModels(allOps, allModels) as OperationsMap)
-      .apply(::extend)
-      .also { op -> op.operations.extendedOperation.forEach {
-        if (it.hasMultipleResponses || it.hasResponseHeaders)
-          generateSupportTypes = true
-      } }
+    allOps
+      .apply { put(ModelPackageKey, modelPackage) }
+      .also { ops -> ops.operations.operation.forEach { if (it.needsWrapperResponse) generateSupportTypes = true } }
+      .also { if (generateSupportTypes) it[SupportPackageKey] = "${modelPackage}.support.*" }
       .apply {
-        imports = imports
-          .filterNotTo(ArrayList(8)) { it["import"]?.startsWith(modelPackage) == true }
-          .also { it.add(mapOf("import" to "$modelPackage.*")) }
-
-        val extraImports = HashSet<String>(4)
-
-        operations.extendedOperation.forEach {
-          if (it.needsPartialResponse)
-            extraImports.add("$modelPackage.support.*")
-          if (it.useJaxRsResponse)
-            extraImports.add("jakarta.ws.core.Response")
-          if (it.formParams.any { p -> p.baseType == "InputStream" })
-            extraImports.add("java.io.InputStream")
-        }
-
-        extraImports.sorted().forEach { imports.add(mapOf("import" to it)) }
-      }
-      .apply {
-        operations.extendedOperation.forEach { op ->
-          op.allParams.forEach { it.fixStdLibImports(op.extraImports) }
-          op.requiredParams.forEach { it.fixStdLibImports(op.extraImports) }
-          op.optionalParams.forEach { it.fixStdLibImports(op.extraImports) }
-          op.formParams.forEach { it.fixStdLibImports(op.extraImports) }
+        operations.operation.forEach { op ->
+          if (op.needsWrapperResponse) {
+            op.responseHeaders.asSequence()
+              .filter { header -> importCorrectionPackages.any { header.baseType.startsWith(it) } }
+              .forEach { op.imports.add(it.baseType) }
+          }
         }
       }
-      .also { operations = it }
-      .also { ops -> debugOperations?.bufferedWriter()?.use { Json.pretty().writeValue(it, ops) } }
-
-  private fun CodegenParameter.fixStdLibImports(newImports: MutableSet<String>) {
-    when {
-      dataType == "java.io.File" -> {
-        newImports.add("java.io.File")
-        overrideDataType("File")
-      }
-
-      isArray -> {
-        when (baseType) {
-          "java.io.File" -> "File"
-          else           -> null
-        }?.also {
-          newImports.add(baseType)
-          overrideDataType(dataType.replace(baseType, it))
-          items.overrideDataType("File")
-        }
-      }
-    }
-  }
-
-  private fun extend(ops: OperationsMap) {
-    ops.operations.operation = ops.operations.operation.map(::ExtendedOperation)
-  }
-
-  @Suppress("UNCHECKED_CAST")
-  private val OperationMap.extendedOperation
-    get() = operation as List<ExtendedOperation>
-
-  // endregion Operation Processing
+      .apply { patchImports() }
+      .also { this.operations = it }
+      .also { ops -> debugOperations?.bufferedWriter()?.use { jsonWriter.writeValue(it, ops) } }
 
   override fun postProcess() {
     if (generateSupportTypes) {
       val supportPackage = "$modelPackage.support"
-      val supportFolder  = Path(modelFileFolder(), "support")
+      val supportFolder = Path(modelFileFolder(), "support")
 
       supportFolder.createDirectories()
 
@@ -264,10 +201,10 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
 
       operations!!.operations.operation.asSequence()
         .map {
-          (it as ExtendedOperation).let { op ->
+          it.let { op ->
             UnionImpl(
               supportPackage,
-              op.extraImports.also { it.add("$modelPackage.*") },
+              modelPackage,
               op,
               op.responses.asSequence()
                 .flatMap { res -> res.content?.asSequence()?.map { con -> res to con } ?: emptySequence() }
@@ -281,7 +218,175 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
     }
   }
 
-  // region Utilities
+  override fun postProcessFile(file: File, fileType: String) {
+    if (fileType == "model") {
+      file.writeText(
+        file.readText()
+          .replace("\n\n\n", "\n\n")
+          .replace("\n\n)", "\n)"))
+    }
+  }
+
+  private fun OperationsMap.patchImports() {
+    // Break down the list of maps into a set of import strings to avoid adding
+    // duplicate imports.
+    val tempImports = imports.asSequence()
+      .map { it["import"]!! }
+      .toMutableSet()
+
+    operations.operation.forEach {
+      if (it.needsWrapperResponse)
+        tempImports.add("$modelPackage.support.*")
+      if (it.usesJaxRSResponse)
+        tempImports.add("jakarta.ws.core.Response")
+      if (it.formParams.any { p -> p.baseType == "InputStream" })
+        tempImports.add("java.io.InputStream")
+
+      it.allParams.forEach { param ->
+        if (importCorrectionPackages.any { param.baseType?.startsWith(it) == true }) {
+          tempImports.add(param.baseType)
+        }
+      }
+    }
+
+    imports = tempImports.map { mapOf("import" to it) }
+  }
+
+  private fun PropValue.processProperty() {
+    when {
+      value.isArray -> fixArrayType()
+      importCorrectionPackages.any { baseType.startsWith(it) } -> packagePathToImport()
+      openApiType in formatMapping -> adjustForFormat()
+    }
+  }
+
+  private fun PropValue.packagePathToImport() {
+    overrideDataType(baseType.substringAfterLast('.'))
+  }
+
+  private fun PropValue.adjustForFormat() {
+    val newType = formatMapping[openApiType]!![format ?: "*"]
+      ?: return
+
+    if (newType.contains('.')) {
+      overrideDataType(newType.substringAfterLast('.'))
+    } else {
+      overrideDataType(newType)
+    }
+
+    baseType = newType
+  }
+
+  private fun TypedValue.fixArrayType() {
+    if (format == "array") {
+      var optIn = false
+
+      if (items!!.isNumeric) {
+        val primArray = when (dataType) {
+          "Integer" -> "IntArray"
+          "Long"    -> "LongArray"
+          "Double"  -> "DoubleArray"
+          "Float"   -> "FloatArray"
+          "UInt"    -> "UIntArray"
+          "ULong"   -> "ULongArray"
+          "Byte"    -> "ByteArray"
+          "UByte"   -> "UByteArray"
+          "Short"   -> "ShortArray"
+          "UShort"  -> "UShortArray"
+          else      -> null
+        }
+
+        if (primArray != null) {
+          overrideDataType(primArray)
+          containerTypeMapped = primArray
+
+          if (primArray.startsWith('U')) {
+            optIn = true
+          }
+        } else {
+          overrideDataType("Array<${dataType}>")
+          containerTypeMapped = "Array"
+        }
+      } else if (items!!.isBoolean) {
+        overrideDataType("BooleanArray")
+        containerTypeMapped = "BooleanArray"
+      }
+
+      if (optIn) {
+        vendorExtensions[KotlinAnnotations] = listOf("@OptIn(ExperimentalUnsignedTypes::class)")
+      }
+    } else {
+      if (importCorrectionPackages.any { baseType.startsWith(it) })
+        overrideArrayType(baseType.substringAfterLast('.'))
+    }
+  }
+
+  private fun CodegenModel.fixTypes() {
+    if (isEnum) {
+      imports.add("com.fasterxml.jackson.annotation.JsonCreator")
+      imports.add("com.fasterxml.jackson.annotation.JsonValue")
+      return
+    }
+
+    imports.add("com.fasterxml.jackson.annotation.JsonProperty")
+
+    arrayOf(vars, allVars, requiredVars, optionalVars, readOnlyVars, readWriteVars)
+      .processProperties {
+        @Suppress("UNCHECKED_CAST")
+        (it.vendorExtensions[KotlinAnnotations] as List<String>?)?.also(imports::addAll)
+        BreakState.Continue
+      }
+  }
+
+  private fun CodegenModel.processDiscriminator(models: ModelIndex, enumDiscriminators: EnumDiscriminators) {
+    val disc = ModelUtils.getModelByName(parentModel.discriminator.propertyType, models)
+      ?: return
+
+    if (disc.isEnum)
+      processEnumDiscriminator(disc, enumDiscriminators)
+    else
+      processRawDiscriminator()
+  }
+
+  private fun CodegenModel.processEnumDiscriminator(disc: CodegenModel, enumDiscriminators: EnumDiscriminators) {
+    val discField = parentModel.discriminator.propertyBaseName
+    val discValue = vendorExtensions[VendorExtension.X_DISCRIMINATOR_VALUE.getName()] as String
+
+    arrayOf(vars, allVars, requiredVars, optionalVars, readOnlyVars, readWriteVars)
+      .processProperties {
+        if (it.defaultValue == null && it.baseName == discField) {
+          it.defaultValue = enumDiscriminators.getOrComputeDefaultValue(discValue, disc)
+          it.isReadOnly = true
+
+          BreakState.SkipCollection
+        } else {
+          BreakState.Continue
+        }
+      }
+
+    vendorExtensions[DataClassBodyFlag] = true
+  }
+
+  private fun CodegenModel.processRawDiscriminator() {
+    if (defaultValue == null)
+      defaultValue = vendorExtensions[VendorExtension.X_DISCRIMINATOR_VALUE.name].toString()
+  }
+
+  private fun TypedValue.overrideArrayType(newItemType: String) {
+    val newArrayType = "$containerTypeMapped<$newItemType>"
+
+    dataType = newArrayType
+    dataTypeWithEnum = newArrayType
+
+    items!!.overrideDataType(newItemType)
+
+    baseType = items!!.baseType
+  }
+
+  private fun TypedValue.overrideDataType(type: String) {
+    dataType = type
+    dataTypeWithEnum = type
+  }
 
   private enum class BreakState { Continue, SkipCollection, Break }
 
@@ -308,30 +413,15 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
         BreakState.Continue -> continue
         BreakState.SkipCollection,
         BreakState.Break,
-          -> return state
+                            -> return state
       }
     }
 
     return BreakState.Continue
   }
 
-  private fun CodegenParameter.overrideDataType(type: String) {
-    dataType = type
-    baseType = type
-    datatypeWithEnum = type
-  }
-
-  private fun CodegenProperty.overrideDataType(type: String) {
-    dataType = type
-    datatypeWithEnum = type
-    baseType = type
-  }
-
   @Suppress("UNCHECKED_CAST")
-  private fun MutableMap<String, Map<Any, String>>.getOrComputeDefaultValue(
-    name: String,
-    disc: CodegenModel,
-  ): String {
+  private fun EnumDiscriminators.getOrComputeDefaultValue(name: String, disc: CodegenModel): String {
     get(disc.classname)?.also { return it[name]!! }
 
     val enumVals = disc.allowableValues["enumVars"] as List<Map<String, Any>>
@@ -342,6 +432,4 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
       .toMap()
       .also { put(disc.classname, it) }[name]!!
   }
-
-  // endregion Utilities
 }

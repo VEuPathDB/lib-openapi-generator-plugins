@@ -13,7 +13,8 @@ data class ${model.classname}(
     @if(!param.isReadOnly)
       @template.model.pojoProp(param = param)
     @endif
-  @endfor)@if(!model.parent.isNullOrBlank()): ${model.parent}@if(model.isMap || model.isArray)()@endif@endif@if(model.vendorExtensions?.get("x-has-data-class-body") == true) {@endif
+  @endfor
+)@if(!model.parent.isNullOrBlank()): ${model.parent}@if(model.isMap || model.isArray)()@endif@endif@if(model.vendorExtensions?.get("x-has-data-class-body") == true) {@endif
   @for(field in model.allVars)
     @if(field.isReadOnly)
       @get:JsonProperty("${field.baseName}")
@@ -21,6 +22,4 @@ data class ${model.classname}(
         get() = ${field.defaultValue}
     @endif
   @endfor
-@if(model.vendorExtensions?.get("x-has-data-class-body") == true)
-}
-@endif
+@if(model.vendorExtensions?.get("x-has-data-class-body") == true)}@endif

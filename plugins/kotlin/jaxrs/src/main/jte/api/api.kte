@@ -1,29 +1,41 @@
 @import org.openapitools.codegen.model.OperationsMap
-@import vpdb.codegen.jaxrs.kt.ExtendedOperation
+@import org.openapitools.codegen.CodegenOperation
 @import gg.jte.support.ForSupport
-@param ops: OperationsMap
-package ${ops["package"] as String}
+@import vpdb.codegen.jaxrs.kt.tpl.*
 
-@for(op in ops.operations.operation)
-  @for(ext in (op as ExtendedOperation).extraImports)
-import ${ext}
-  @endfor
-@endfor
+@param ops: OperationsMap
+
+package ${ops.packageName}
+
 import jakarta.ws.rs.*
-@for(imp in ops.imports)
-import ${imp["import"]}
+
+@for(imp in ops.nonModelImports.sorted())
+  import ${imp}
 @endfor
+
+
+!{val modelImports = ops.modelImports.sorted()}
+@if(modelImports.size > 4)
+  import ${ops.modelPackage}.*
+  @if(ops.needsSupportPackage)
+    import ${ops.supportPackage}
+  @endif
+@else
+  @for(imp in modelImports)
+    import ${imp}
+  @endfor
+@endif
 
 
 @Path("/")
-@if(ops["hasConsumes"] as Boolean? == true)
-  @Consumes(@for(mt in ForSupport.of(ops["consumes"] as List<Map<String, String>>))"${mt.get()["mediaType"]}"@if(!mt.isLast), @endif@endfor)
+@if(ops.hasConsumes)
+  @Consumes(${ops.consumes.joinToString("\", \"", "\"", "\"")})
 @endif
-@if(ops["hasProduces"] as Boolean? == true)
-  @Produces({@for(mt in ForSupport.of(ops["produces"] as List<Map<String, String>>))"${mt.get()["mediaType"]}"@if(!mt.isLast), @endif@endfor)
+@if(ops.hasProduces)
+  @Produces(${ops.produces.joinToString("\", \"", "\"", "\"")})
 @endif
-interface ${ops["classname"] as String} {
+interface ${ops.className} {
 @for(op in ops.operations.operation)
-  @template.api.method(it = (op as ExtendedOperation))
+  @template.api.method(it = op)
 @endfor
 }

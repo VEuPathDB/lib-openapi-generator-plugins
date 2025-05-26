@@ -1,5 +1,10 @@
 package vpdb.codegen.jaxrs.kt
 
+import org.openapitools.codegen.model.ModelsMap
+
+typealias ModelIndex = Map<String, ModelsMap>
+typealias EnumDiscriminators = MutableMap<String, Map<Any, String>>
+
 internal val mimeTypeNameOverrides = mapOf(
   "application/json"          to "json",
   "application/octet-stream"  to "binary",

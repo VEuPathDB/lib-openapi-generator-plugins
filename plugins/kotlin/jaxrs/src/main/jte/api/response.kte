@@ -1,9 +1,12 @@
-@import vpdb.codegen.jaxrs.kt.ExtendedOperation
-@param op: ExtendedOperation
-@if(op.useJaxRsResponse)
-: Response
-@elseif(op.hasMultipleResponses)
-: Union${op.operationIdCamelCase}Response
+@import org.openapitools.codegen.CodegenOperation
+@import vpdb.codegen.jaxrs.kt.tpl.needsWrapperResponse
+@import vpdb.codegen.jaxrs.kt.tpl.usesJaxRSResponse
+
+@param op: CodegenOperation
+@if(op.usesJaxRSResponse)
+  : Response
+@elseif(op.needsWrapperResponse)
+  : Union${op.operationIdCamelCase}Response
 @elseif(!op.returnType.isNullOrEmpty())
-: ${op.returnType}
+  : ${op.returnType}
 @endif

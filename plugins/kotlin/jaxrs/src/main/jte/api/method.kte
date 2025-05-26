@@ -1,13 +1,16 @@
-@import vpdb.codegen.jaxrs.kt.ExtendedOperation
+@import org.openapitools.codegen.CodegenOperation
 @import gg.jte.support.ForSupport
-@param it: ExtendedOperation
+@import vpdb.codegen.jaxrs.kt.tpl.inputTypes
+@import vpdb.codegen.jaxrs.kt.tpl.outputTypes
+
+@param it: CodegenOperation
   @${it.httpMethod}
   @Path("${it.path}")
   @if(it.hasConsumes)
-    @Consumes(@for(mt in ForSupport.of(it.consumes))"${mt.get()["mediaType"]}"@if(!mt.isLast), @endif@endfor)
+    @Consumes(${it.inputTypes.joinToString("\", \"", "\"", "\"")})
   @endif
   @if(it.hasProduces)
-    @Produces(@for(mt in ForSupport.of(it.produces))"${mt.get()["mediaType"]}"@if(!mt.isLast), @endif@endfor)
+    @Produces(${it.outputTypes.joinToString("\", \"", "\"", "\"")})
   @endif
   fun ${it.operationId}(
     @for(param in it.headerParams)
