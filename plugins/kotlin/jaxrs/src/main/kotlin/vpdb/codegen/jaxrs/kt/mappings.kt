@@ -19,7 +19,6 @@ val dataTypeMapping = mapOf(
   "decimal" to "java.math.BigDecimal",
   "date-time" to "java.time.OffsetDateTime",
   "date" to "java.time.LocalDate",
-  "file" to "java.io.File",
   "Date" to "java.time.LocalDate",
   "DateTime" to "java.time.OffsetDateTime",
   "UnsignedLong" to "ULong",
@@ -37,6 +36,7 @@ val formatMapping = mapOf(
     "uuid" to "java.util.UUID",
     "regex" to "Regex",
     "binary" to "ByteArray",
+    "file" to "java.io.File",
     "*" to "String",
   ),
   "integer" to mapOf(

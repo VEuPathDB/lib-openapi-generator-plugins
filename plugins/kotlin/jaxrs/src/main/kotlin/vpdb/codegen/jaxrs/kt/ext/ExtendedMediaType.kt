@@ -70,6 +70,8 @@ class ExtendedMediaType: CodegenMediaType {
         val c = get(i++)
         if (c.isWord()) {
           sb.append(c)
+        } else if (c == '*') {
+          sb.append("Any")
         } else {
           while (!get(i).isWord()) {
             i++

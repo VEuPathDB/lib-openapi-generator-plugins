@@ -1,28 +1,27 @@
 package vpdb.codegen.jaxrs.kt
 
 import com.fasterxml.jackson.databind.ObjectWriter
-import io.swagger.util.Json
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.media.Schema
 import org.openapitools.codegen.*
 import org.openapitools.codegen.languages.KotlinServerCodegen
 import org.openapitools.codegen.model.ModelMap
 import org.openapitools.codegen.model.ModelsMap
+import org.openapitools.codegen.model.OperationMap
 import org.openapitools.codegen.model.OperationsMap
 import org.openapitools.codegen.utils.ModelUtils
 import vpdb.codegen.jaxrs.kt.debug.configureJsonWriter
 import vpdb.codegen.jaxrs.kt.ext.ExtendedMediaType
 import vpdb.codegen.jaxrs.kt.tpl.needsWrapperResponse
 import vpdb.codegen.jaxrs.kt.tpl.usesJaxRSResponse
-import vpdb.codegen.jaxrs.kt.util.ParamValue
-import vpdb.codegen.jaxrs.kt.util.PropValue
-import vpdb.codegen.jaxrs.kt.util.TypedValue
+import vpdb.codegen.jaxrs.kt.util.*
 import java.io.File
 import java.nio.file.Path
 import java.util.IdentityHashMap
 import kotlin.io.path.Path
 import kotlin.io.path.bufferedWriter
 import kotlin.io.path.createDirectories
+import kotlin.io.path.writeText
 
 class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
   /**
@@ -39,7 +38,9 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
   private var debugModels: Path? = null
   private var debugOperations: Path? = null
 
-  private var operations: OperationsMap? = null
+  private val operations = mutableSetOf<OperationMap>()
+
+  private lateinit var resourceDir: Path
 
   init {
     library = Constants.JAXRS_SPEC
@@ -87,6 +88,12 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
     additionalProperties[Constants.INTERFACE_ONLY] = true
     additionalProperties[Constants.OMIT_GRADLE_WRAPPER] = true
 
+    resourceDir = if ("resourceFolder" in additionalProperties) {
+      Path(outputDir).resolve(additionalProperties["resourceFolder"] as String)
+    } else {
+      Path(outputDir).resolve(sourceFolder).parent.resolve("resources")
+    }
+
     enablePostProcessFile = true
   }
 
@@ -107,7 +114,6 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
 
     val model = (objs.models.firstOrNull { it != null } ?: return objs).model
 
-//    model.imports = model.imports.filterTo(HashSet(objs.imports.size)) { import -> import.contains('.') }
     model.fixTypes()
 
     // Bug in the generator, this return value isn't used.
@@ -124,8 +130,26 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
       .apply { processProperty() }
       .value
 
+  override fun preprocessOpenAPI(openAPI: OpenAPI) {
+    super.preprocessOpenAPI(openAPI)
+
+    openAPI.paths.forEach { (_, body) ->
+      body.readOperations()?.forEach {
+        it.tags?.let { tags ->
+          if (tags.size > 1) {
+            val last = tags.last()
+            tags.clear()
+            tags.add(last)
+          }
+        }
+      }
+    }
+  }
+
   override fun postProcessModelProperty(model: CodegenModel, property: CodegenProperty) {
     super.postProcessModelProperty(model, property)
+
+    property.cleanTypeNames()
 
     if (property.baseType.contains('.')) {
       model.imports.add(property.baseType)
@@ -137,6 +161,9 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
   override fun postProcessParameter(parameter: CodegenParameter) {
     super.postProcessParameter(parameter)
 
+    cleanSuffix(parameter::dataType, parameter::dataType::set)
+    cleanSuffix(parameter::baseType, parameter::baseType::set)
+
     if (parameter.isArray) {
       if (importCorrectionPackages.any { parameter.items!!.baseType.startsWith(it) })
         ParamValue(parameter).overrideArrayType(parameter.items!!.baseType.substringAfterLast('.'))
@@ -146,26 +173,43 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
     }
   }
 
-  override fun postProcessAllModels(models: ModelIndex) =
-    (super.postProcessAllModels(models) as ModelIndex)
+  override fun postProcessAllModels(models: ModelIndex): ModelIndex {
+    val it = models.iterator()
+
+    while (it.hasNext()) {
+      it.next().also { (key, _) ->
+        if (key.contains('1') || key.contains("allOf"))
+          it.remove()
+      }
+    }
+
+    return (super.postProcessAllModels(models) as ModelIndex)
       .also { out ->
         val enumDiscriminators = HashMap<String, Map<Any, String>>()
+
+        val schemaDir = resourceDir.resolve("schema/rest-api")
+        schemaDir.createDirectories()
 
         out.asSequence()
           .onEach { (_, map) -> map.imports = emptyList() }
           .map { it.key }
           .mapNotNull { ModelUtils.getModelByName(it, models) }
           .onEach { it.imports = it.imports.filterTo(HashSet<String>(3)) { i -> i.contains('.') } }
-          .onEach { if (it.discriminator != null) {
-            it.imports.add("com.fasterxml.jackson.annotation.JsonIgnoreProperties")
-            it.imports.add("com.fasterxml.jackson.annotation.JsonSubTypes")
-            it.imports.add("com.fasterxml.jackson.annotation.JsonTypeInfo")
-          } }
+          .onEach { it.streamVars().forEach(CodegenProperty::cleanTypeNames) }
+          .onEach {
+            if (it.discriminator != null) {
+              it.imports.add("com.fasterxml.jackson.annotation.JsonIgnoreProperties")
+              it.imports.add("com.fasterxml.jackson.annotation.JsonSubTypes")
+              it.imports.add("com.fasterxml.jackson.annotation.JsonTypeInfo")
+            }
+          }
+          .onEach { schemaDir.resolve(it.classname + ".json").writeText(it.modelJson) }
           .filterNot { it.parentModel?.discriminator == null }
           .filterNot { it.parentModel.discriminator.propertyType in languageSpecificPrimitives }
           .forEach { it.processDiscriminator(models, enumDiscriminators) }
       }
       .also { out -> debugModels?.bufferedWriter()?.use { jsonWriter.writeValue(it, out) } }
+  }
 
   override fun postProcessResponseWithProperty(response: CodegenResponse, property: CodegenProperty) {
     super.postProcessResponseWithProperty(response, property)
@@ -179,6 +223,11 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
       .also { if (generateSupportTypes) it[SupportPackageKey] = "${modelPackage}.support.*" }
       .apply {
         operations.operation.forEach { op ->
+          op.responses?.forEach { res ->
+            cleanSuffix(res::dataType, res::dataType::set)
+            cleanSuffix(res::baseType, res::baseType::set)
+          }
+
           if (op.needsWrapperResponse) {
             op.responseHeaders.asSequence()
               .filter { header -> importCorrectionPackages.any { header.baseType.startsWith(it) } }
@@ -187,8 +236,8 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
         }
       }
       .apply { patchImports() }
-      .also { this.operations = it }
-      .also { ops -> debugOperations?.bufferedWriter()?.use { jsonWriter.writeValue(it, ops) } }
+      .also { it.operations?.also(this.operations::add) }
+      .also { _ -> debugOperations?.bufferedWriter()?.use { jsonWriter.writeValue(it, this.operations) } }
 
   override fun postProcess() {
     if (generateSupportTypes) {
@@ -199,27 +248,34 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
 
       JteAdaptor.compileTemplate(supportPackage, "model/union/def.kte", supportFolder.resolve("AbstractUnionResponse.kt"))
 
-      operations!!.operations.operation.asSequence()
-        .map {
-          it.let { op ->
-            UnionImpl(
-              supportPackage,
-              modelPackage,
-              op,
-              op.responses.asSequence()
-                .flatMap { res -> res.content?.asSequence()?.map { con -> res to con } ?: emptySequence() }
-                .map { (res, pair) -> ContentPair(res, ExtendedMediaType.extend(pair.key, pair.value)) }
-                .toList()
-            )
+      operations.forEach { operation ->
+        operation.operation.asSequence()
+          .map {
+            it.let { op ->
+              UnionImpl(
+                supportPackage,
+                modelPackage,
+                op,
+                op.responses.asSequence()
+                  .flatMap { res -> res.content?.asSequence()
+                    ?.onEach { con -> con.value.schema.also { schema ->
+                      cleanSuffix(schema::dataType, schema::dataType::set)
+                      cleanSuffix(schema::baseType, schema::baseType::set)
+                    } }
+                    ?.map { con -> res to con } ?: emptySequence() }
+                  .map { (res, pair) -> ContentPair(res, ExtendedMediaType.extend(pair.key, pair.value)) }
+                  .toList()
+              )
+            }
+          }.forEach {
+            JteAdaptor.compileTemplate(it, "model/union/impl.kte", supportFolder.resolve("Union${it.operation.operationIdCamelCase}Response.kt"))
           }
-        }.forEach {
-          JteAdaptor.compileTemplate(it, "model/union/impl.kte", supportFolder.resolve("Union${it.operation.operationIdCamelCase}Response.kt"))
-        }
+      }
     }
   }
 
   override fun postProcessFile(file: File, fileType: String) {
-    if (fileType == "model") {
+    if (fileType == "model" || fileType == "api") {
       file.writeText(
         file.readText()
           .replace("\n\n\n", "\n\n")
@@ -239,7 +295,7 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
         tempImports.add("$modelPackage.support.*")
       if (it.usesJaxRSResponse)
         tempImports.add("jakarta.ws.core.Response")
-      if (it.formParams.any { p -> p.baseType == "InputStream" })
+      if (it.formParams.any { p -> p.baseType == "InputStream" || p.isFile })
         tempImports.add("java.io.InputStream")
 
       it.allParams.forEach { param ->

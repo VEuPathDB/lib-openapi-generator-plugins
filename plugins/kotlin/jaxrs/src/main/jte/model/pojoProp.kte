@@ -1,13 +1,13 @@
 @import org.openapitools.codegen.CodegenProperty
 @import vpdb.codegen.jaxrs.kt.KotlinAnnotations
 @param param: CodegenProperty
-@JsonProperty("${param.baseName}")
+@field:JsonProperty("${param.baseName}")
   @if(param.format == "date-time")
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", shape = JsonFormat.Shape.STRING)
+    @field:JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", shape = JsonFormat.Shape.STRING)
   @elseif(param.format == "date")
-    @JsonFormat(pattern = "yyyy-MM-dd", shape = JsonFormat.Shape.STRING)
+    @field:JsonFormat(pattern = "yyyy-MM-dd", shape = JsonFormat.Shape.STRING)
   @elseif(param.format == "time")
-    @JsonFormat(pattern = "HH:mm:ss.SSSXXX", shape = JsonFormat.Shape.STRING)
+    @field:JsonFormat(pattern = "HH:mm:ss.SSSXXX", shape = JsonFormat.Shape.STRING)
   @endif
   @if(param.vendorExtensions[KotlinAnnotations] != null)
     @for(ann in param.vendorExtensions[KotlinAnnotations] as List<String>)
