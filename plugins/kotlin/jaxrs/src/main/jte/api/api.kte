@@ -8,6 +8,7 @@
 package ${ops.packageName}
 
 import jakarta.ws.rs.*
+import jakarta.ws.rs.core.MediaType
 
 @for(imp in ops.nonModelImports.sorted())
   import ${imp}
@@ -29,10 +30,10 @@ import jakarta.ws.rs.*
 
 @Path("/")
 @if(ops.hasConsumes)
-  @Consumes(${ops.consumes.joinToString("\", \"", "\"", "\"")})
+  @Consumes(${ops.consumes.joinToString(", ")})
 @endif
 @if(ops.hasProduces)
-  @Produces(${ops.produces.joinToString("\", \"", "\"", "\"")})
+  @Produces(${ops.produces.joinToString(", ")})
 @endif
 interface ${ops.className} {
 @for(op in ops.operations.operation)

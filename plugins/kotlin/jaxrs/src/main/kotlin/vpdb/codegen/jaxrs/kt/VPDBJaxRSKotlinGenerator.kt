@@ -21,7 +21,6 @@ import java.util.IdentityHashMap
 import kotlin.io.path.Path
 import kotlin.io.path.bufferedWriter
 import kotlin.io.path.createDirectories
-import kotlin.io.path.writeText
 
 class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
   /**
@@ -39,6 +38,9 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
   private var debugOperations: Path? = null
 
   private val operations = mutableSetOf<OperationMap>()
+
+  private val annotationsPackage
+    by lazy { modelPackage.substringBeforeLast('.') + ".annotations" }
 
   private lateinit var resourceDir: Path
 
@@ -82,8 +84,7 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
         is Path   -> debugOperations = path
       }
 
-    if (debugModels != null || debugOperations != null)
-      jsonWriter = configureJsonWriter()
+    jsonWriter = configureJsonWriter()
 
     additionalProperties[Constants.INTERFACE_ONLY] = true
     additionalProperties[Constants.OMIT_GRADLE_WRAPPER] = true
@@ -161,13 +162,17 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
   override fun postProcessParameter(parameter: CodegenParameter) {
     super.postProcessParameter(parameter)
 
-    cleanSuffix(parameter::dataType, parameter::dataType::set)
-    cleanSuffix(parameter::baseType, parameter::baseType::set)
+    parameter::dataType.cleanSuffix()
+    parameter::baseType.cleanSuffix()
+    parameter::defaultValue.cleanSuffix()
 
     if (parameter.isArray) {
       if (importCorrectionPackages.any { parameter.items!!.baseType.startsWith(it) })
         ParamValue(parameter).overrideArrayType(parameter.items!!.baseType.substringAfterLast('.'))
-    } else if (!parameter.isContainer) {
+    } else if (parameter.isContainer) {
+      if (parameter.isMap)
+        parameter.fixMapKey()
+    } else {
       if (importCorrectionPackages.any { parameter.dataType.startsWith(it) })
         ParamValue(parameter).overrideDataType(parameter.dataType.substringAfterLast('.'))
     }
@@ -178,10 +183,12 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
 
     while (it.hasNext()) {
       it.next().also { (key, _) ->
-        if (key.contains('1') || key.contains("allOf"))
+        if (key.hasTypeSuffix())
           it.remove()
       }
     }
+
+    val schemaAnnotationImport = "$annotationsPackage.JsonSchema"
 
     return (super.postProcessAllModels(models) as ModelIndex)
       .also { out ->
@@ -195,7 +202,13 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
           .map { it.key }
           .mapNotNull { ModelUtils.getModelByName(it, models) }
           .onEach { it.imports = it.imports.filterTo(HashSet<String>(3)) { i -> i.contains('.') } }
-          .onEach { it.streamVars().forEach(CodegenProperty::cleanTypeNames) }
+          .onEach { it.imports.add(schemaAnnotationImport) }
+          .onEach {
+            it.streamVars()
+              .onEach { it::defaultValue.cleanSuffix() }
+              .onEach { it::defaultValueWithParam.cleanSuffix() }
+              .forEach(CodegenProperty::cleanTypeNames)
+          }
           .onEach {
             if (it.discriminator != null) {
               it.imports.add("com.fasterxml.jackson.annotation.JsonIgnoreProperties")
@@ -203,7 +216,10 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
               it.imports.add("com.fasterxml.jackson.annotation.JsonTypeInfo")
             }
           }
-          .onEach { schemaDir.resolve(it.classname + ".json").writeText(it.modelJson) }
+          .onEach {
+            openAPI.components.schemas[it.schemaName]!!
+              .writeTo(schemaDir.resolve(it.schemaName + ".json"))
+          }
           .filterNot { it.parentModel?.discriminator == null }
           .filterNot { it.parentModel.discriminator.propertyType in languageSpecificPrimitives }
           .forEach { it.processDiscriminator(models, enumDiscriminators) }
@@ -224,8 +240,8 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
       .apply {
         operations.operation.forEach { op ->
           op.responses?.forEach { res ->
-            cleanSuffix(res::dataType, res::dataType::set)
-            cleanSuffix(res::baseType, res::baseType::set)
+            res::dataType.cleanSuffix()
+            res::baseType.cleanSuffix()
           }
 
           if (op.needsWrapperResponse) {
@@ -240,6 +256,15 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
       .also { _ -> debugOperations?.bufferedWriter()?.use { jsonWriter.writeValue(it, this.operations) } }
 
   override fun postProcess() {
+    JteAdaptor.compileTemplate(
+      annotationsPackage,
+      "extras/json-schema-annotation.kte",
+      Path(modelFileFolder())
+        .resolveSibling("annotations")
+        .apply { createDirectories() }
+        .resolve("JsonSchema.kt")
+    )
+
     if (generateSupportTypes) {
       val supportPackage = "$modelPackage.support"
       val supportFolder = Path(modelFileFolder(), "support")
@@ -259,8 +284,8 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
                 op.responses.asSequence()
                   .flatMap { res -> res.content?.asSequence()
                     ?.onEach { con -> con.value.schema.also { schema ->
-                      cleanSuffix(schema::dataType, schema::dataType::set)
-                      cleanSuffix(schema::baseType, schema::baseType::set)
+                      schema::dataType.cleanSuffix()
+                      schema::baseType.cleanSuffix()
                     } }
                     ?.map { con -> res to con } ?: emptySequence() }
                   .map { (res, pair) -> ContentPair(res, ExtendedMediaType.extend(pair.key, pair.value)) }

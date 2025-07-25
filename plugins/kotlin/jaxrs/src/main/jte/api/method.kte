@@ -7,10 +7,10 @@
   @${it.httpMethod}
   @Path("${it.path}")
   @if(it.hasConsumes)
-    @Consumes(${it.inputTypes.joinToString("\", \"", "\"", "\"")})
+    @Consumes(${it.inputTypes.joinToString(", ")})
   @endif
   @if(it.hasProduces)
-    @Produces(${it.outputTypes.joinToString("\", \"", "\"", "\"")})
+    @Produces(${it.outputTypes.joinToString(", ")})
   @endif
   fun ${it.operationId}(
     @for(param in it.headerParams)

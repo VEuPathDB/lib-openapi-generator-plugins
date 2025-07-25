@@ -17,6 +17,7 @@ typealias ${models.model.classname} = ${models.model.dataType}
 @for(ann in models.extraTypeAnnotations)
 ${ann}
 @endfor
+@JsonSchema("${models.model.schemaName}")
   @if(models.model.discriminator != null)
 @template.model.iface(model = models.model)
   @else

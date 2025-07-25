@@ -14,11 +14,11 @@ inline val CodegenOperation.usesJaxRSResponse: Boolean
   get() = responses.any { UseJaxRSResponseFlag in it.vendorExtensions }
 
 
-inline val CodegenOperation.inputTypes: Set<String>
-  get() = consumes.mapTo(HashSet(consumes.size)) { it["mediaType"] as String }
+inline val CodegenOperation.inputTypes
+  get() = consumes.convertMedaTypes()
 
-inline val CodegenOperation.outputTypes: Set<String>
-  get() = produces.mapTo(HashSet(produces.size)) { it["mediaType"] as String }
+inline val CodegenOperation.outputTypes
+  get() = produces.convertMedaTypes()
 
 // endregion Operation
 
@@ -56,15 +56,33 @@ inline val OperationsMap.hasConsumes
   get() = get("hasConsumes") as Boolean? ?: false
 
 @Suppress("UNCHECKED_CAST")
-inline val OperationsMap.consumes: Set<String>
-  get() = (get("consumes") as List<Map<String, String>>).let { maps -> maps.mapTo(HashSet(maps.size)) { it["mediaType"] as String } }
+inline val OperationsMap.consumes
+  get() = (get("consumes") as List<Map<String, String>>).convertMedaTypes()
 
 
 inline val OperationsMap.hasProduces
   get() = get("hasProduces") as Boolean? ?: false
 
 @Suppress("UNCHECKED_CAST")
-inline val OperationsMap.produces: Set<String>
-  get() = (get("produces") as List<Map<String, String>>).let { maps -> maps.mapTo(HashSet(maps.size)) { it["mediaType"] as String } }
+inline val OperationsMap.produces
+  get() =(get("produces") as List<Map<String, String>>).convertMedaTypes()
+
+
+fun List<Map<String, String>>.convertMedaTypes() =
+  asSequence()
+    .map { it["mediaType"] as String }
+    .map { when (it) {
+      "application/json"            -> "MediaType.APPLICATION_JSON"
+      "multipart/form-data"         -> "MediaType.MULTIPART_FORM_DATA"
+      "application/octet-stream"    -> "MediaType.APPLICATION_OCTET_STREAM"
+      "application/json-patch+json" -> "MediaType.APPLICATION_JSON_PATCH_JSON"
+      "application/xml"             -> "MediaType.APPLICATION_XML"
+      "text/plain"                  -> "MediaType.TEXT_PLAIN"
+      "text/xml"                    -> "MediaType.TEXT_XML"
+      "text/html"                   -> "MediaType.TEXT_HTML"
+      "*/*"                         -> "MediaType.WILDCARD"
+      else                          -> "\"$it\""
+    } }
+    .toSet()
 
 // endregion OperationsMap

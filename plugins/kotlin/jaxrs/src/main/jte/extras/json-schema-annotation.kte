@@ -1,0 +1,7 @@
+@param packageName: String
+package ${packageName}
+
+@MustBeDocumented
+@Target(AnnotationTarget.CLASS)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class JsonSchema(val name: String)
