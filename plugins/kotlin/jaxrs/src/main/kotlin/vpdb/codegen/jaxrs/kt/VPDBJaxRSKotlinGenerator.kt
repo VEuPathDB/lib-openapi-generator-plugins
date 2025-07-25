@@ -1,6 +1,8 @@
 package vpdb.codegen.jaxrs.kt
 
 import com.fasterxml.jackson.databind.ObjectWriter
+import com.fasterxml.jackson.databind.node.ObjectNode
+import io.swagger.util.Json
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.media.Schema
 import org.openapitools.codegen.*
@@ -217,7 +219,9 @@ class VPDBJaxRSKotlinGenerator: KotlinServerCodegen(), CodegenConfig {
             }
           }
           .onEach {
-            openAPI.components.schemas[it.schemaName]!!
+            Json.mapper()
+              .convertValue(openAPI.components.schemas[it.schemaName], ObjectNode::class.java)
+              .also { it.correctSchema() }
               .writeTo(schemaDir.resolve(it.schemaName + ".json"))
           }
           .filterNot { it.parentModel?.discriminator == null }
